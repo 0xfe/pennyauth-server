@@ -17,24 +17,36 @@ function createAPIKey(origin) {
     .update(apiSecret)
     .digest('hex');
 
+  const quidSecret = crypto
+    .createHash('SHA256')
+    .update(process.env.QUID_API_SECRET || QUID_API_SECRET)
+    .digest('base64');
+
+  // Calculate proxyMAC for origin
+  const proxyMAC = crypto
+    .createHmac('SHA256', quidSecret)
+    .update(`origin:${origin}`)
+    .digest('base64');
+
   const keyEntity = {
     key: datastore.key(['t-Key', apiKey]),
     data: {
       origin,
+      proxyMAC,
       secret: hashedSecret,
     },
   };
 
   // Saves the entity
   H.log(`Saving ${keyEntity.key.name}: ${keyEntity.data.origin}`);
-  return datastore.insert(keyEntity).then(() => ({ apiKey, apiSecret }));
+  return datastore.insert(keyEntity).then(() => ({ apiKey, apiSecret, proxyMAC }));
 }
 
 async function lookupAPIKey(apiKey, origin) {
   const key = datastore.key(['t-Key', apiKey]);
   const entity = await datastore.get(key);
 
-  if (!entity) {
+  if (!entity || entity.length === 0 || !entity[0]) {
     return H.makeError('NOTFOUND', 'Invalid API key');
   }
 
@@ -64,7 +76,7 @@ function validatePayment(receipt) {
   return sig === receipt.sig;
 }
 
-async function processCORS(req, res) {
+function processCORS(req, res) {
   // CORS setup
   const origin = req.headers.origin || req.headers.referer;
   H.log(`${req.method}:${origin} ${req.originalUrl}`);
