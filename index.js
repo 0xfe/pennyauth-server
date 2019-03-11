@@ -1,28 +1,16 @@
 const crypto = require('crypto');
 const process = require('process');
-
 const { Datastore } = require('@google-cloud/datastore');
+const H = require('./helpers');
 
 // Test secrets
 const QUID_API_SECRET = 'ks-WCUIO9CE2M41IXAA87HTWHQI2YW2YSX6';
-const PENNYAUTH_SHARED_SECRET = 's00per secure';
-const VERSION = '0.00';
 
 const datastore = new Datastore({ projectId: process.env.PROJECT_ID || 'pennyauth' });
 
-function log(...args) {
-  // eslint-disable-next-line
-  console.log(VERSION, ...args);
-}
-
-function logError(...args) {
-  // eslint-disable-next-line
-  console.error(VERSION, ...args);
-}
-
-async function createAPIKey(origin) {
-  const apiKey = crypto.pseudoRandomBytes(48).toString('hex');
-  const apiSecret = crypto.pseudoRandomBytes(48).toString('hex');
+function createAPIKey(origin) {
+  const apiKey = `k-${crypto.pseudoRandomBytes(16).toString('hex')}`;
+  const apiSecret = `s-${crypto.pseudoRandomBytes(16).toString('hex')}`;
 
   const hashedSecret = crypto
     .createHash('SHA256')
@@ -30,7 +18,7 @@ async function createAPIKey(origin) {
     .digest('hex');
 
   const keyEntity = {
-    key: datastore.key(['t-Key', `k-${apiKey}`]),
+    key: datastore.key(['t-Key', apiKey]),
     data: {
       origin,
       secret: hashedSecret,
@@ -38,8 +26,23 @@ async function createAPIKey(origin) {
   };
 
   // Saves the entity
-  await datastore.save(keyEntity);
-  log(`Saved ${keyEntity.key.name}: ${keyEntity.data.origin}`);
+  H.log(`Saving ${keyEntity.key.name}: ${keyEntity.data.origin}`);
+  return datastore.insert(keyEntity).then(() => ({ apiKey, apiSecret }));
+}
+
+async function lookupAPIKey(apiKey, origin) {
+  const key = datastore.key(['t-Key', apiKey]);
+  const entity = await datastore.get(key);
+
+  if (!entity) {
+    return H.makeError('NOTFOUND', 'Invalid API key');
+  }
+
+  if (entity[0].origin !== origin) {
+    return H.makeError('PERMISSION_DENIED', 'Invalid origin');
+  }
+
+  return H.makeSuccess(entity[0]);
 }
 
 function validatePayment(receipt) {
@@ -64,6 +67,7 @@ function validatePayment(receipt) {
 async function processCORS(req, res) {
   // CORS setup
   const origin = req.headers.origin || req.headers.referer;
+  H.log(`${req.method}:${origin} ${req.originalUrl}`);
 
   // Send response to OPTIONS requests
   res.set('Access-Control-Allow-Methods', 'OPTIONS,POST');
@@ -78,25 +82,30 @@ async function processCORS(req, res) {
   }
 
   if (req.method !== 'POST') {
-    res.status(403).send(`Bad request method: ${req.method}`);
-    return false;
+    return H.sendError(res, 403, 'SERVER_ERROR', `Bad request method: ${req.method}`);
   }
 
   return true;
 }
 
 exports.validateCaptcha = async (req, res) => {
-  if (!processCORS(req, res)) return;
+  if (!processCORS(req, res)) return {};
 
   // Body is already parsed (as JSON or whatever the content-type is) by cloud functions.
   const params = req.body;
-  if (!validatePayment(params.receipt)) {
-    res.status(401).send('{"success": false, "code": "VALIDATION_FAILED"}');
-    return;
+
+  const origin = req.headers.origin || req.headers.referer;
+  const result = await lookupAPIKey(params.apiKey, origin);
+  if (!result.success) {
+    return H.send(res, 401, result);
   }
 
-  const result = {
-    id: crypto.pseudoRandomBytes(48).toString('hex'),
+  if (!validatePayment(params.receipt)) {
+    return H.sendError(res, 401, 'VALIDATION_FAILED', 'Could not verify payment');
+  }
+
+  const response = {
+    id: crypto.pseudoRandomBytes(32).toString('hex'),
     unixTime: Math.floor(new Date() / 1000),
     origin: params.origin,
     apiKey: params.apiKey,
@@ -104,12 +113,12 @@ exports.validateCaptcha = async (req, res) => {
 
   // Calculate signature of payload using secret
   const payload = [result.id, result.unixTime, result.origin, result.apiKey].join(',');
-  result.sig = crypto
-    .createHmac('SHA256', PENNYAUTH_SHARED_SECRET)
+  response.sig = crypto
+    .createHmac('SHA256', result.data.secret)
     .update(payload)
     .digest('base64');
 
-  res.status(200).send(`{"success": true, "data": ${JSON.stringify(result)}}`);
+  return H.sendSuccess(res, response);
 };
 
 exports.createAPIKey = async (req, res) => {
@@ -119,11 +128,11 @@ exports.createAPIKey = async (req, res) => {
   const params = req.body;
 
   createAPIKey(params.origin)
-    .then(() => {
-      res.status(200).send(`{"success": true, "params": ${JSON.stringify(params)}}`);
+    .then((result) => {
+      H.sendSuccess(res, result);
     })
     .catch((e) => {
-      logError(e);
-      res.status(500).send({}`"success": false, "error": "${e}"}`);
+      H.logError(e);
+      H.sendError(res, e);
     });
 };

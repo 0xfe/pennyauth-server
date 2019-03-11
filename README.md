@@ -26,6 +26,11 @@ $ functions start
 $ functions deploy validateCaptcha --trigger-http
 $ functions call validateCaptcha --file=request.json
 $ functions logs read
+
+# Create key
+$ functions call createAPIKey --data='{"origin": "http://localhost:8080"}'
+
+# Create validate captcha
 ```
 
 ## Deploying to production
@@ -33,6 +38,7 @@ $ functions logs read
 ```
 $ gcloud auth login mo@quid.works
 $ gcloud config set project pennyauth
+$ gcloud functions deploy createAPIKey --runtime nodejs8 --trigger-http
 $ gcloud functions deploy validateCaptcha --runtime nodejs8 --trigger-http
 ```
 
