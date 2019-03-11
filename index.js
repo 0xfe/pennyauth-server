@@ -8,7 +8,8 @@ const QUID_API_SECRET = 'ks-WCUIO9CE2M41IXAA87HTWHQI2YW2YSX6';
 
 const datastore = new Datastore({ projectId: process.env.PROJECT_ID || 'pennyauth' });
 
-function createAPIKey(origin) {
+function createAPIKey(params) {
+  const { email, origin } = params;
   const apiKey = `k-${crypto.pseudoRandomBytes(16).toString('hex')}`;
   const apiSecret = `s-${crypto.pseudoRandomBytes(16).toString('hex')}`;
 
@@ -31,6 +32,7 @@ function createAPIKey(origin) {
   const keyEntity = {
     key: datastore.key(['t-Key', apiKey]),
     data: {
+      email,
       origin,
       originKey,
       secret: hashedSecret,
@@ -89,6 +91,7 @@ function processCORS(req, res) {
   res.set('Access-Control-Allow-Origin', origin);
 
   if (req.method === 'OPTIONS') {
+    // 204 Success, no data
     res.status(204).send('');
     return false;
   }
@@ -124,7 +127,7 @@ exports.validateCaptcha = async (req, res) => {
   };
 
   // Calculate signature of payload using secret
-  const payload = [result.id, result.unixTime, result.origin, result.apiKey].join(',');
+  const payload = [response.id, response.unixTime, response.origin, response.apiKey].join(',');
   response.sig = crypto
     .createHmac('SHA256', result.data.secret)
     .update(payload)
@@ -139,7 +142,7 @@ exports.createAPIKey = async (req, res) => {
   // Body is already parsed (as JSON or whatever the content-type is) by cloud functions.
   const params = req.body;
 
-  createAPIKey(params.origin)
+  createAPIKey(params)
     .then((result) => {
       H.sendSuccess(res, result);
     })
