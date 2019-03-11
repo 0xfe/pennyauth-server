@@ -23,7 +23,7 @@ function createAPIKey(origin) {
     .digest('base64');
 
   // Calculate proxyMAC for origin
-  const proxyMAC = crypto
+  const originKey = crypto
     .createHmac('SHA256', quidSecret)
     .update(`origin:${origin}`)
     .digest('base64');
@@ -32,14 +32,14 @@ function createAPIKey(origin) {
     key: datastore.key(['t-Key', apiKey]),
     data: {
       origin,
-      proxyMAC,
+      originKey,
       secret: hashedSecret,
     },
   };
 
   // Saves the entity
   H.log(`Saving ${keyEntity.key.name}: ${keyEntity.data.origin}`);
-  return datastore.insert(keyEntity).then(() => ({ apiKey, apiSecret, proxyMAC }));
+  return datastore.insert(keyEntity).then(() => ({ apiKey, apiSecret, originKey }));
 }
 
 async function lookupAPIKey(apiKey, origin) {
