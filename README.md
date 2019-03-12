@@ -1,12 +1,6 @@
 # pennyauth-server
 
-A server-side pennyauth authenticator built on Google Cloud Functions.
-
-## Production notes
-
-- GCP Project: pennyauth
-- Service account `pennyauth@appspot.gserviceaccount.com`
-- Cloud function: `validateCaptcha`
+A server-side [Pennyauth](https://github.com/0xfe/pennyauth) authenticator built on Google Cloud Functions.
 
 ## Setup and testing
 
@@ -33,7 +27,13 @@ $ functions call createAPIKey --data='{"origin": "http://localhost:8080"}'
 # Create validate captcha
 ```
 
-## Deploying to production
+## Production notes
+
+- GCP Project: pennyauth
+- Service account `pennyauth@appspot.gserviceaccount.com`
+- Cloud function: `validateCaptcha`
+
+### Deploying to production
 
 ```
 $ gcloud auth login mo@quid.works
