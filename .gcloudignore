@@ -12,5 +12,6 @@
 # below:
 .git
 .gitignore
+.eslintrc.js
 
 node_modules

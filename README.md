@@ -40,6 +40,10 @@ $ gcloud auth login mo@quid.works
 $ gcloud config set project pennyauth
 $ gcloud functions deploy createAPIKey --runtime nodejs8 --trigger-http
 $ gcloud functions deploy validateCaptcha --runtime nodejs8 --trigger-http
+
+# Update secrets
+gcloud functions deploy createAPIKey --update-env-vars QUID_API_SECRET=ks-XXX
+gcloud functions deploy validateCaptcha --update-env-vars QUID_API_SECRET=ks-XXX
 ```
 
 ## Debugging
